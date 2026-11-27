@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync/atomic"
 )
 
@@ -66,7 +67,7 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 		Body string `json:"body"`
 	}
 	type returnVals struct {
-		Valid bool `json:"valid"`
+		CleanedBody string `json:"cleaned_body"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -83,7 +84,25 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, returnVals{Valid: true})
+	respondWithJSON(w, http.StatusOK, returnVals{
+		CleanedBody: replaceProfaneWords(params.Body),
+	})
+}
+
+func replaceProfaneWords(text string) string {
+	profane := map[string]struct{}{
+		"kerfuffle": {},
+		"sharbert":  {},
+		"fornax":    {},
+	}
+
+	words := strings.Split(text, " ")
+	for i, word := range words {
+		if _, found := profane[strings.ToLower(word)]; found {
+			words[i] = "****"
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 func main() {
