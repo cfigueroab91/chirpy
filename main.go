@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -42,6 +43,49 @@ func handlerReadiness(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(http.StatusText(http.StatusOK)))
 }
 
+func respondWithError(w http.ResponseWriter, code int, msg string) {
+	respondWithJSON(w, code, struct {
+		Error string `json:"error"`
+	}{Error: msg})
+}
+
+func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
+	dat, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("Error marshalling JSON: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	w.Write(dat)
+}
+
+func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Body string `json:"body"`
+	}
+	type returnVals struct {
+		Valid bool `json:"valid"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	if err := decoder.Decode(&params); err != nil {
+		log.Printf("Error decoding parameters: %s", err)
+		respondWithError(w, http.StatusBadRequest, "Something went wrong")
+		return
+	}
+
+	const maxChirpLength = 140
+	if len(params.Body) > maxChirpLength {
+		respondWithError(w, http.StatusBadRequest, "Chirp is too long")
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, returnVals{Valid: true})
+}
+
 func main() {
 	apiCfg := &apiConfig{}
 
@@ -53,6 +97,7 @@ func main() {
 	mux.HandleFunc("GET /api/healthz", handlerReadiness)
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerMetrics)
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
+	mux.HandleFunc("POST /api/validate_chirp", handlerValidateChirp)
 
 	server := &http.Server{
 		Addr:    ":8080",
